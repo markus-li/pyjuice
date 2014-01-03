@@ -236,8 +236,9 @@ parser.add_argument('-d', '--daemon', action="store_true", required=False, help=
          'socket listening for connections from other instances of pyJuice. pyJuice clients can ask for encryption/decryption of data ' +
          'without knowing the passphrase. Only one daemon per user is possible. The socket is owned by the user running the daemon ' +
          'and only read/writable by the owner.')
-parser.add_argument('-t', '--testclient', action="store_true", required=False, help=argparse.SUPPRESS)
 parser.add_argument('-c', '--console', action="store_true", required=False, help=argparse.SUPPRESS) # Keeps the daemon from forking
+parser.add_argument('-t', '--testclient', action="store_true", required=False, help=argparse.SUPPRESS)
+parser.add_argument('-e', '--testdecrypt', action="store_true", required=False, help=argparse.SUPPRESS)
 
 args = parser.parse_args()
 
@@ -355,7 +356,6 @@ if args.daemon:
     try:
       print >>sys.stderr, 'Connection from client'
 
-      # Receive the data in small chunks and retransmit it
       save_data = False
       data_buf = ''
       while True:
@@ -394,7 +394,7 @@ if args.daemon:
               connection.send( '--DONE---' )
               
           else:
-            print >>sys.stderr, 'no more data from client'
+            print >>sys.stderr, 'No more data from client'
             break
     except KeyboardInterrupt:
       print 'Exiting...'
@@ -405,14 +405,19 @@ if args.daemon:
       pass
     finally:
       # Clean up the connection
-      print "2Closing connection to client..."
+      print "Closing connection to client..."
       try:
         connection.close()
       except NameError:
         pass
   exit()
 
-
+if args.testdecrypt:
+  decryptor = AESCipher(passphrase)
+  print "testdecrypt with %r" % passphrase
+  print "%r" % decryptor.decrypt('')
+  exit()
+  
 if args.testclient:
   # This is a hidden function used only for debugging the daemon...
   print "Testclient..."
@@ -426,7 +431,7 @@ if args.testclient:
   
   try:
     # Send data
-    message = 'DECRYPT::asdg#as#asdf'
+    message = 'DECRYPT::asd'
     print >>sys.stderr, 'sending "%s"' % message
     sock.send( '--START--' )
     sock.sendall(message)
@@ -446,7 +451,7 @@ if args.testclient:
         elif '--DONE---' == data_buf[-9:]:
           save_data = False
           data_buf = data_buf[:-9]
-          print >>sys.stderr, 'Got this back from the server:\n%r' % data_buf
+          print >>sys.stderr, 'Got this back from the server:\n%r' % base64.standard_b64decode(data_buf)
           break
       else:
         print >>sys.stderr, 'no more data from server'
@@ -493,7 +498,6 @@ if token_updated:
   json.dump(token, open(os.path.expanduser(token_file), 'w'))
 
 
-
 try:
   cloudsync = json.load(open(os.path.expanduser(encrypted_data_file)))
   if datetime.datetime.now() - datetime.datetime.fromtimestamp(cloudsync[u'date']) >= datetime.timedelta(minutes=30):
@@ -509,8 +513,6 @@ except (ValueError, IOError, OldData) as e:
   cookies = dict(session=authenticate[u'session'][u'identifier'])
   #print('---------------')
   
-  #curl -XPOST -d '{}' -H "Cookie: session=s%3ASeyAwfSd8zdfA9CceY8KI4zP.5rSCoj%2BVty1jCsEFUygprwBIFsqOhcj9sLegOqHzZJI" https://api.sonelli.com/cloudsync
-  
   r = requests.post('https://api.sonelli.com/cloudsync', cookies=cookies)
   cloudsync = r.json()
   json.dump(cloudsync, open(os.path.expanduser(encrypted_data_file), 'w'))
@@ -518,7 +520,6 @@ except (ValueError, IOError, OldData) as e:
 
 #pprint(cloudsync)
 #print datetime.datetime.fromtimestamp(cloudsync[u'date']).strftime('%Y-%m-%d %H:%M:%S')
-
 
 identities = cloudsync[u'objects'][u'com.sonelli.juicessh.models.Identity']
 
@@ -575,9 +576,3 @@ for identity in identities:
       print "No data for %r available, skipping..." % str(private_key_filename)
     
   i+=1  
-  
-
-
-
-  
-

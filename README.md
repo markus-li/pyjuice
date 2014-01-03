@@ -30,6 +30,10 @@ In the future I might split it and create an auto-merged version, but for now, t
 * Fork each connection to the daemon to handle simultaneous connections. Is this really needed?
 * Come up with more features to implement
 * Allow forcing update of the encrypted json file and not just every 30 minutes.
+* Full READ support for everything in the backup I use in the app.
+* Full READ support for the remaining data. Since I don't use EC2, I won't implement support for that though.
+* Don't update com.sonelli.juicessh.models.ConnectionCounter, at least for now
+* Encrypt and upload changes. Need full READ support of everything I use first.
 * Remove unneeded output and add actual debug output instead.
 * Write tests (any volunters?)
 
@@ -60,6 +64,17 @@ $ sudo pip install requests argparse requests-oauthlib passlib pycrypto setproct
 # Run it!
 $ ~/pyjuice/pyjuice.py
 ```
+
+## Additional notes regarding the json-data
+
+com.sonelli.juicessh.models.Connection[]["type"]:
+0 = ssh
+
+com.sonelli.juicessh.models.Team:
+What is encryptionTest?
+
+com.sonelli.juicessh.models.TeamEncryption:
+How is data encrypted?
 
 ## Credits and License
 
