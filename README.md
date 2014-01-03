@@ -3,82 +3,63 @@ pyjuice
 
 ## Description
 
-pyJuice is an open source tool for recieving and decrypting your latest JuiceSSH CloudSync 
+pyJuice is an open source tool for retrieving and decrypting your latest JuiceSSH CloudSync 
 backup and extracting the private keys into ~/.ssh.
+
+In order to have any use of this script you need to have the PRO version of JuiceSSH (https://sonelli.com/) and have CloudSync turned ON.
 
 * Obtains an OAUTH2 authentication token from Google API
 * Authenticates with the JuiceSSH API
 * Retrieves your latest encrypted CloudSync backup in JSON format
 * Decrypts the backup using a user provided passphrase
-* Saves the private keys in ~/.ssh with permissions 0600
+* Saves the private keys in ~/.ssh with permission 0600
 
 ## TODO
 
 * Better error-handling
-* Document requirements
-* Write installation details
-* Handle deleted identities
+* Only update files if timestamp has changed for entry.
+* Handle deleted identities(?)
 * Come up with more features to implement
 * Allow forcing update of the encrypted json file and not just every 30 minutes.
+* Remove unneeded output and add actual debug output instead.
 * Write tests (any volunters?)
 
+## Install
 
-## Additional information which needs editing.
+First download and install Python 2.7. 
+On Ubuntu this is as easy as:
 
-1. Authenticate with Google
-Obtain a Google OAUTH2 token with the following scope:
+```bash
+$ sudo apt-get install python2.7 python-pip
+```
 
-    SCOPE: "https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email"
+For other platforms use your packet manager (if any) or download from an installer from http://www.python.org/getit/.
 
+```bash
+# Fetch the source
+$ cd ~
+$ git clone https://github.com/markus-li/pyjuice.git pyjuice
 
-2. Authenticate with JuiceSSH API
-Use the token acquired to authenticate with the JuiceSSH API via a HTTP GET request
+# Get required modules (use virtualenv if you want/need)
+# 
+$ sudo pip install requests argparse requests-oauthlib passlib pycrypto
+```
 
-    curl https://api.sonelli.com/authenticate/<token>
+## Usage
 
-This will return a JSON user object that includes a session identifier such as:
+```bash
+# Run it!
+$ ~/pyjuice/pyjuice.py
+```
 
-{
-  "name": "Your Name",
-  "email": "your.email@gmail.com",
-  "purchases": [
-    {
-      "time": 1374584431000,
-      "order": "12994763169054705758.1359473553152469",
-      "product": "com.sonelli.juicessh.propack",
-      "state": 0,
-      "_id": "520d0311076393665f0013fb"
-    }
-  ],
-  "disabled": false,
-  "session": {
-    "expires": 1388514020,
-    "identifier": "s%3ASeyAwfSd8zdfA9CceY8KI4zP.5rSCoj%2BVty1jCsEFUygprwBIFsqOhcj9sLegOqHzZJI"
-  },
-  "signature": "b42f3ff4c41fd77bfcaf5d8aa5cbdc1809727de67051f0a7e876701637f65ccc244ce674eea037d286817be6f69874fbc6904a4474cb79e985d4eb52e2c685f8d0cf419cfa20875265ec0a6a3c0ca2c8354d898757fff7ec27698d2f5267363d6d87"
-}
+## Credits and License
 
+Markus Liljergren created this small piece of software, but the main software behind CloudSync is JuiceSSH for Android from Sonelli Ltd (https://sonelli.com/). 
 
-3. Request the latest CloudSync backup (in JSON format)
+Neither me nor this script has any affiliation with Sonelli Ltd, but if you like this piece of software, get the Pro version of JuiceSSH and support Sonelli Ltd.
 
-Using the previously obtained session identifier as a HTTP session cookie header we can get the latest CloudSync backup via a HTTP POST request.
+Lots of thanks to Paul Maddox for providing me with the information needed in order to interact with the CloudSync API.
 
-curl -XPOST -d '{}' -H "Cookie: session=s%3ASeyAwfSd8zdfA9CceY8KI4zP.5rSCoj%2BVty1jCsEFUygprwBIFsqOhcj9sLegOqHzZJI" https://api.sonelli.com/cloudsync
+pyJuice is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
-Normally the JuiceSSH app would send a full JSON manifest of all of it's encrypted records, but since all we're interested in doing is pulling down the cloudsync backup then we can just send a blank one with '{}'.
-
-The JSON manifest returned contains an array of each type of record, sorted by record type.
-
-4. Decrypt the data
-
-As the JuiceSSH servers only store encrypted data, that's all you'll have so far.
-Each record in the JSON CloudSync manifest received will have an '_id', 'modified' and 'data' field.
-
-The data field is the record, converted to JSON and then encrypted.
-
-To decrypt it, first split it into three parts on the '#' character.
-The first part is the salt, the second is the IV, the third is the cipherText.
-
-Before decryption, the required AES decryption key has to be derived from your JuiceSSH decryption passphrase using PBKDF2 with HMAC-SHA1 using the salt and 1000 iterations.
-
-Once you have the AES key, the data is decrypted using AES-256 with PKCS#7 padding in CBC mode.
+pyJuice is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more details.

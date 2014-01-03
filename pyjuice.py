@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 #
-# pyJuice is an open source tool for recieving and decrypting your latest JuiceSSH CloudSync 
+# pyJuice is an open source tool for retrieving and decrypting your latest JuiceSSH CloudSync 
 # backup and extracting the private keys into ~/.ssh.
 #
 # 
 #    This file is part of pyJuice.
 #
-#    Foobar is free software: you can redistribute it and/or modify
+#    pyJuice is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
 #    the Free Software Foundation, either version 3 of the License, or
 #    (at your option) any later version.
@@ -99,7 +99,7 @@ scope = ['https://www.googleapis.com/auth/userinfo.profile',
 # Any and all files we create should be restricted to the current user ONLY!
 os.umask(077)
 
-parser = argparse.ArgumentParser(prog='pyjuice', description='pyJuice is an open source tool for recieving and decrypting your ' +
+parser = argparse.ArgumentParser(prog='pyjuice', description='pyJuice is an open source tool for retrieving and decrypting your ' +
          'latest JuiceSSH CloudSync backup and extracting the private keys into ~/.ssh.')
 parser.add_argument('-p', '--passphrase', type=str, required=False, help='Set the passphrase (INSECURE!). Do NOT use this unless ' +
          'you KNOW that noone can list your process and get your argument. Clean your history after using this!')
@@ -170,8 +170,6 @@ except (ValueError, IOError, OldData) as e:
 
 #pprint(cloudsync)
 #print datetime.datetime.fromtimestamp(cloudsync[u'date']).strftime('%Y-%m-%d %H:%M:%S')
-
-
 
 
 identities = cloudsync[u'objects'][u'com.sonelli.juicessh.models.Identity']
