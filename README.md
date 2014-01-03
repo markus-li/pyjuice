@@ -14,11 +14,20 @@ In order to have any use of this script you need to have the PRO version of Juic
 * Decrypts the backup using a user provided passphrase
 * Saves the private keys in ~/.ssh with permission 0600
 
+##NOTE
+
+It is not great having everything in one file, but for the sake of easily copying the file between systems, this is how I want it. 
+In the future I might split it and create an auto-merged version, but for now, this will have to do.
+
 ## TODO
 
 * Better error-handling
 * Only update files if timestamp has changed for entry.
 * Handle deleted identities(?)
+* Make sure the daemon does NOT crash/hang when sent garbage. This should be the case now, but tests need to be written.
+* Add logging facilities to the daemon?
+* Scramble the passphrase in memory when not in direct use by the daemon? How necessary is this?
+* Fork each connection to the daemon to handle simultaneous connections. Is this really needed?
 * Come up with more features to implement
 * Allow forcing update of the encrypted json file and not just every 30 minutes.
 * Remove unneeded output and add actual debug output instead.
@@ -30,7 +39,7 @@ First download and install Python 2.7.
 On Ubuntu this is as easy as:
 
 ```bash
-$ sudo apt-get install python2.7 python-pip
+$ sudo apt-get update && sudo apt-get install python2.7 python-pip python2.7-dev
 ```
 
 For other platforms use your packet manager (if any) or download from an installer from http://www.python.org/getit/.
@@ -42,7 +51,7 @@ $ git clone https://github.com/markus-li/pyjuice.git pyjuice
 
 # Get required modules (use virtualenv if you want/need)
 # 
-$ sudo pip install requests argparse requests-oauthlib passlib pycrypto
+$ sudo pip install requests argparse requests-oauthlib passlib pycrypto setproctitle
 ```
 
 ## Usage
