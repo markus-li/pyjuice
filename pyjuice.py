@@ -23,8 +23,10 @@
 
 # Settings
 token_file = '~/.pyjuice.token'
-encrypted_data_file = '~/.pyjuice.encrypted_data'
+encrypted_data_file = '~/.pyjuice.encrypted.raw'
 unix_socket = '~/.pyjuice.socket'
+encrypted_json_file = '~/.pyjuice.encrypted.json'
+decrypted_json_file = '~/.pyjuice.decrypted.json'
 daemon_pid_file = '~/.pyjuice.daemon_pid'
 daemon_stdout_file = '~/.pyjuice.daemon_stdout'
 daemon_stderr_file = '~/.pyjuice.daemon_stderr'
@@ -198,7 +200,8 @@ class AESCipherClient:
     Requires b64 data separated by # to decrypt
     """
     self.check_safe_socket()
-    if b64_data == '':
+    if (b64_data == '' or
+       not isinstance(b64_data, (unicode, str))):
       raise ValueError
     return self._send("DECRYPT", b64_data)
   
@@ -230,15 +233,18 @@ parser = argparse.ArgumentParser(prog='pyjuice', description='pyJuice is an open
          'latest JuiceSSH CloudSync backup and extracting the private keys into ~/.ssh.')
 parser.add_argument('-p', '--passphrase', type=str, required=False, help='Set the passphrase (INSECURE!). Do NOT use this unless ' +
          'you KNOW that noone can list your process and get your argument. Clean your history after using this!')
-parser.add_argument('-n', '--no_daemon', action="store_true", required=False, help='If set, no daemon will be used, even if present. ' +
-         'Ignored if -d/--daemon is set.')
+parser.add_argument('-n', '--no_daemon', action="store_true", required=False, help='If set, no daemon will be used for decrytion, ' +
+         'even if present. Ignored if -d/--daemon is set.')
 parser.add_argument('-d', '--daemon', action="store_true", required=False, help='Runs pyJuice as a daemon and creates a UNIX domain ' +
          'socket listening for connections from other instances of pyJuice. pyJuice clients can ask for encryption/decryption of data ' +
          'without knowing the passphrase. Only one daemon per user is possible. The socket is owned by the user running the daemon ' +
          'and only read/writable by the owner.')
+parser.add_argument('-a', '--decryptall', action="store_true", required=False, help='This decrypts ALL data, including passwords(!), ' +
+         'into %r. (DANGEROUS!)' % decrypted_json_file)
 parser.add_argument('-c', '--console', action="store_true", required=False, help=argparse.SUPPRESS) # Keeps the daemon from forking
 parser.add_argument('-t', '--testclient', action="store_true", required=False, help=argparse.SUPPRESS)
 parser.add_argument('-e', '--testdecrypt', action="store_true", required=False, help=argparse.SUPPRESS)
+
 
 args = parser.parse_args()
 
@@ -412,7 +418,9 @@ if args.daemon:
         pass
   exit()
 
+############################ DEBUG TOOLS ONLY ############################
 if args.testdecrypt:
+  # This is a hidden function used only for debugging the decryption...
   decryptor = AESCipher(passphrase)
   print "testdecrypt with %r" % passphrase
   print "%r" % decryptor.decrypt('')
@@ -462,6 +470,7 @@ if args.testclient:
     print >>sys.stderr, 'closing socket'
     sock.close()
   exit()
+############################ END DEBUG TOOLS #############################
 
 # Make sure we have a token using Google oauth2
 token_updated = False
@@ -516,63 +525,141 @@ except (ValueError, IOError, OldData) as e:
   r = requests.post('https://api.sonelli.com/cloudsync', cookies=cookies)
   cloudsync = r.json()
   json.dump(cloudsync, open(os.path.expanduser(encrypted_data_file), 'w'))
+  # Save the encrypted version in a pretty format as well
+  pprint(cloudsync, open(os.path.expanduser(encrypted_json_file), 'w'))
 
 
 #pprint(cloudsync)
 #print datetime.datetime.fromtimestamp(cloudsync[u'date']).strftime('%Y-%m-%d %H:%M:%S')
 
-identities = cloudsync[u'objects'][u'com.sonelli.juicessh.models.Identity']
-
-#pprint(identities)
-i=0
-for identity in identities:
-  if identity[u'_encrypted']:
-    # https://github.com/Sonelli/gojuice/blob/master/crypto/aes/aes.go
-    print '============================'
-    print 'The data is encrypted!'
-    data = identity[u'data']
-    
-    if live_daemon:
-      print 'Using pyJuice daemon for decryption...'
-      decryptor = AESCipherClient(unix_socket_expanded)
-    else:  
-      print 'Using locally available passphrase for decryption...'
-      decryptor = AESCipher(passphrase)
-    text = decryptor.decrypt(data)
-    try:
-      json_data = json.loads(text)
-    except ValueError:
-      print 'The decryption FAILED! Either the data is corrupt or the passphrase is incorrect...'
-      exit(5)
-    #print '----------------------'
-    #pprint(json_data)
-    
-    print '----------------------'
-    try:
-      json_data[u'password'] = decryptor.decrypt(json_data[u'password'])
-    except (KeyError, ValueError) as e:
-      json_data[u'password'] = ''
-      pass
-    try:
-      json_data[u'privatekey'] = decryptor.decrypt(json_data[u'privatekey'])
-    except (KeyError, ValueError) as e:
-      json_data[u'privatekey'] = ''
-      pass
-    try:
-      json_data[u'privatekeyPassword'] = decryptor.decrypt(json_data[u'privatekeyPassword'])
-    except (KeyError, ValueError) as e:
-      json_data[u'privatekeyPassword'] = ''
-      pass
-    print 'The data was successfully decrypted!'
-    #pprint(json_data)
-    print "----------------------"
-    private_key_filename = '~/.ssh/' + 'juice_' + json_data[u'nickname'] + '_' + str(i)
-    if json_data[u'privatekey'] != '':
-      private_key_file = open(os.path.expanduser(private_key_filename), "w")
-      private_key_file.write(json_data[u'privatekey'])
-      private_key_file.close()
-      print "Created/updated %r..." % str(private_key_filename)
-    else:
-      print "No data for %r available, skipping..." % str(private_key_filename)
-    
-  i+=1  
+if args.decryptall:
+  # This decrypts everything into a json-file (except team data currently).
+  print 'Decrypting everything...'
+  if live_daemon:
+    print 'Using pyJuice daemon for decryption...'
+    decryptor = AESCipherClient(unix_socket_expanded)
+  else:  
+    print 'Using locally available passphrase for decryption...'
+    decryptor = AESCipher(passphrase)
+  
+  def itterate_dict( data ):
+    new_data = {}
+    for key, value in data.iteritems():
+      if isinstance(value, list):
+        #print "%r is an array" % key
+        new_data[key] = itterate_array( value )
+      elif isinstance(value, dict):
+        #print "%r is a dict" % key
+        new_data[key] = itterate_dict( value )
+      elif isinstance(value, (unicode, str)):
+        if value != '':
+          try:
+            new_value = decryptor.decrypt(value)
+          except ValueError:
+            new_value = u''
+          if new_value != '':
+            value = new_value
+        if key == u'data':
+          json_data = None
+          try:
+            json_data = json.loads(value)
+          except ValueError:
+            pass
+          if isinstance(json_data, dict):
+            for subkey, subvalue in json_data.iteritems():
+              if subvalue != '':
+                try:
+                  new_subvalue = decryptor.decrypt(subvalue)
+                except ValueError:
+                  new_subvalue = u''
+                if new_subvalue != '':
+                  subvalue = new_subvalue
+              new_data[subkey] = subvalue
+          else:
+            new_data[key] = value
+        else:
+          new_data[key] = value
+      else:
+        #print "%r is something else" % key
+        new_data[key] = value
+    return new_data
+  
+  def itterate_array( data ):
+    new_data = []
+    for value in data:
+      if isinstance(value, list):
+        #print "this is an array"
+        new_data.append(itterate_array( value ))
+      elif isinstance(value, dict):
+        #print "this is a dict"
+        new_data.append(itterate_dict( value ))
+      else:
+        #print "this is something else"
+        new_data.append(value)
+    return new_data
+  
+  if isinstance(cloudsync, dict):
+    cloudsync_decrypted = itterate_dict(cloudsync)
+    #pprint(cloudsync_decrypted)
+    pprint(cloudsync_decrypted, open(os.path.expanduser(decrypted_json_file), 'w'))
+  else:
+    print 'The CloudSync data is faulty! It should be a dict!'
+    exit(1)
+  
+  
+else:
+  identities = cloudsync[u'objects'][u'com.sonelli.juicessh.models.Identity']
+  
+  #pprint(identities)
+  i=0
+  for identity in identities:
+    if identity[u'_encrypted']:
+      # https://github.com/Sonelli/gojuice/blob/master/crypto/aes/aes.go
+      print '============================'
+      print 'The data is encrypted!'
+      data = identity[u'data']
+      
+      if live_daemon:
+        print 'Using pyJuice daemon for decryption...'
+        decryptor = AESCipherClient(unix_socket_expanded)
+      else:  
+        print 'Using locally available passphrase for decryption...'
+        decryptor = AESCipher(passphrase)
+      text = decryptor.decrypt(data)
+      try:
+        json_data = json.loads(text)
+      except ValueError:
+        print 'The decryption FAILED! Either the data is corrupt or the passphrase is incorrect...'
+        exit(5)
+      #print '----------------------'
+      #pprint(json_data)
+      
+      print '----------------------'
+      try:
+        json_data[u'password'] = decryptor.decrypt(json_data[u'password'])
+      except (KeyError, ValueError) as e:
+        json_data[u'password'] = ''
+        pass
+      try:
+        json_data[u'privatekey'] = decryptor.decrypt(json_data[u'privatekey'])
+      except (KeyError, ValueError) as e:
+        json_data[u'privatekey'] = ''
+        pass
+      try:
+        json_data[u'privatekeyPassword'] = decryptor.decrypt(json_data[u'privatekeyPassword'])
+      except (KeyError, ValueError) as e:
+        json_data[u'privatekeyPassword'] = ''
+        pass
+      print 'The data was successfully decrypted!'
+      #pprint(json_data)
+      print "----------------------"
+      private_key_filename = '~/.ssh/' + 'juice_' + json_data[u'nickname'] + '_' + str(i)
+      if json_data[u'privatekey'] != '':
+        private_key_file = open(os.path.expanduser(private_key_filename), "w")
+        private_key_file.write(json_data[u'privatekey'])
+        private_key_file.close()
+        print "Created/updated %r..." % str(private_key_filename)
+      else:
+        print "No data for %r available, skipping..." % str(private_key_filename)
+      
+    i+=1  

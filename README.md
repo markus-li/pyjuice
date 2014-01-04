@@ -63,6 +63,9 @@ $ sudo pip install requests argparse requests-oauthlib passlib pycrypto setproct
 ```bash
 # Run it!
 $ ~/pyjuice/pyjuice.py
+
+# For help, run this:
+$ ~/pyjuice/pyjuice.py -h
 ```
 
 ## Additional notes regarding the json-data
