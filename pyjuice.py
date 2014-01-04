@@ -717,65 +717,32 @@ elif args.command == 'sync':
   
   #pprint(cloudsync)
   #print datetime.datetime.fromtimestamp(cloudsync[u'date']).strftime('%Y-%m-%d %H:%M:%S')
+  
+  if (args.privatekeys or args.decryptall):
+    cloudsync_decrypted = decrypt_cloudsync(cloudsync)
+  
   if args.privatekeys:
-    identities = cloudsync[u'objects'][u'com.sonelli.juicessh.models.Identity']
-    
+    # TODO: Add error-handling
+    identities = cloudsync_decrypted[u'objects'][u'com.sonelli.juicessh.models.Identity']
     #pprint(identities)
     i=0
     for identity in identities:
-      if identity[u'_encrypted']:
-        # https://github.com/Sonelli/gojuice/blob/master/crypto/aes/aes.go
-        print '============================'
-        print 'The data is encrypted!'
-        data = identity[u'data']
-        
-        if live_daemon:
-          print 'Using pyJuice daemon for decryption...'
-          decryptor = AESCipherClient(unix_socket_expanded)
-        else:  
-          print 'Using locally available passphrase for decryption...'
-          decryptor = AESCipher(passphrase)
-        text = decryptor.decrypt(data)
-        try:
-          json_data = json.loads(text)
-        except ValueError:
-          print 'The decryption FAILED! Either the data is corrupt or the passphrase is incorrect...'
-          exit(5)
-        #print '----------------------'
-        #pprint(json_data)
-        
-        print '----------------------'
-        try:
-          json_data[u'password'] = decryptor.decrypt(json_data[u'password'])
-        except (KeyError, ValueError) as e:
-          json_data[u'password'] = ''
-          pass
-        try:
-          json_data[u'privatekey'] = decryptor.decrypt(json_data[u'privatekey'])
-        except (KeyError, ValueError) as e:
-          json_data[u'privatekey'] = ''
-          pass
-        try:
-          json_data[u'privatekeyPassword'] = decryptor.decrypt(json_data[u'privatekeyPassword'])
-        except (KeyError, ValueError) as e:
-          json_data[u'privatekeyPassword'] = ''
-          pass
-        print 'The data was successfully decrypted!'
-        #pprint(json_data)
-        print "----------------------"
-        private_key_filename = '~/.ssh/' + 'juice_' + json_data[u'nickname'] + '_' + str(i)
-        if json_data[u'privatekey'] != '':
+      private_key_filename = '~/.ssh/' + 'juice_' + identity[u'nickname'] + '_' + str(i)
+      try:
+        if identity[u'privatekey'] != '':
           private_key_file = open(os.path.expanduser(private_key_filename), "w")
-          private_key_file.write(json_data[u'privatekey'])
+          private_key_file.write(identity[u'privatekey'])
           private_key_file.close()
           print "Created/updated %r..." % str(private_key_filename)
         else:
-          print "No data for %r available, skipping..." % str(private_key_filename)
-        
-      i+=1  
+          raise KeyError # Make my own error
+      except KeyError:
+        print "No data for %r available, skipping..." % str(private_key_filename)
+      i+=1
+      
   if args.decryptall:
-    # This decrypts everything into a json-file (except team data currently).
-    pprint(decrypt_cloudsync(cloudsync), open(os.path.expanduser(decrypted_json_file), 'w'))
+    # This saves all decrypted data into a json-file (except team data currently).
+    pprint(cloudsync_decrypted, open(os.path.expanduser(decrypted_json_file), 'w'))
     print 'Decrypted data saved to %r.' % decrypted_json_file
 
 else:
