@@ -48,6 +48,7 @@ import resource
 import datetime, time
 from pprint import pprint
 import getpass
+import uuid
 from requests_oauthlib import OAuth2Session
 import base64
 # http://pythonhosted.org/passlib/lib/passlib.utils.pbkdf2.html
@@ -55,7 +56,6 @@ from passlib.utils.pbkdf2 import pbkdf2
 # http://stackoverflow.com/questions/12562021/aes-decryption-padding-with-pkcs5-python
 from Crypto.Cipher import AES
 from Crypto import Random
-
 
 # Constants
 ITERATION_COUNT = 1000
@@ -535,6 +535,7 @@ except (ValueError, IOError, OldData) as e:
 if args.decryptall:
   # This decrypts everything into a json-file (except team data currently).
   print 'Decrypting everything...'
+  #print uuid.uuid4()
   if live_daemon:
     print 'Using pyJuice daemon for decryption...'
     decryptor = AESCipherClient(unix_socket_expanded)
@@ -605,8 +606,7 @@ if args.decryptall:
   else:
     print 'The CloudSync data is faulty! It should be a dict!'
     exit(1)
-  
-  
+  print 'Decryption of all data completed!'
 else:
   identities = cloudsync[u'objects'][u'com.sonelli.juicessh.models.Identity']
   
