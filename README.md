@@ -75,6 +75,9 @@ All IDs are Version 4 UUIDs
 
 com.sonelli.juicessh.models.Connection[]["type"]:
 0 = ssh
+1 = mosh
+2 = local device
+3 = telnet
 
 com.sonelli.juicessh.models.Team:
 What is encryptionTest?

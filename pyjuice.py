@@ -303,6 +303,7 @@ parser_port_forwards.add_argument('-l', '--list', action="store_true", required=
 snippets_help = 'Manage and display Snippets.'
 parser_snippets = subparsers.add_parser('snippets', description=snippets_help, help=snippets_help, parents=[general_group,extra_group])
 parser_snippets.add_argument('-l', '--list', action="store_true", required=False, help='Decrypt and list all available Snippets.')
+parser_snippets.add_argument('-g', '--get', type=str, required=False, help='Get the snippet by name.')
 
 parser_debug = subparsers.add_parser('debug', description='Hidden command used for debugging and testing only.', parents=[general_group,extra_group])
 parser_debug.add_argument('-t', '--testclient', action="store_true", required=False, help='testclient')
@@ -434,13 +435,22 @@ def itterate_dict_decrypt( data ):
 
 def itterate_array( data ):
   new_data = []
+  unique = {}
   for value in data:
     if isinstance(value, list):
       #print "this is an array"
       new_data.append(itterate_array( value ))
     elif isinstance(value, dict):
-      #print "this is a dict"
-      new_data.append(itterate_dict_decrypt( value ))
+      # There are parts where you could end up with duplicates, let's get rid of them :)
+      c_id = None
+      if '_id' in value:
+        c_id = value['_id']
+      elif 'id' in value:
+        c_id = value['id']
+      if (c_id != None and (not c_id in unique)):
+        unique[c_id] = True
+        #print "this is a dict"
+        new_data.append(itterate_dict_decrypt( value ))
     else:
       #print "this is something else"
       new_data.append(value)
@@ -748,15 +758,69 @@ elif args.command == 'sync':
 else:
   cloudsync = get_local_encrypted()
   cloudsync_decrypted = decrypt_cloudsync(cloudsync)
+  try:
+    objects = cloudsync_decrypted[u'objects']
+  except KeyError:
+    print 'There are no entries in the CloudSync Backup'
+    exit()
   if args.command == 'connections':
     if args.list:
       print 'list connections'
+      
   elif args.command == 'identities':
+    try:
+      identities = objects[u'com.sonelli.juicessh.models.Identity']
+    except KeyError:
+      print 'No identities are available'
+      exit()
     if args.list:
-      print 'list identities'
+      result = [['Nickname', 'Username', 'Password', 'Private Key', 'Private Key Password']]
+      for v in identities:
+        password = 'Not Set'
+        privatekey = 'Not Set'
+        privatekeyPassword = 'Not Set'
+        if ('password' in v and v[u'password'] != ''):
+          password = 'Set'
+        if ('privatekey' in v and v[u'privatekey'] != ''):
+          privatekey = 'Set'
+        if ('privatekeyPassword' in v and v[u'privatekeyPassword'] != ''):
+          privatekeyPassword = 'Set'
+        result.append([v[u'nickname'],v[u'username'], password, privatekey, privatekeyPassword])
+      table = Texttable()
+      table.set_deco(Texttable.HEADER)
+      table.set_cols_dtype(['t','t', 't', 't', 't'])
+      table.set_cols_align(['l', 'l', 'l', 'l', 'l'])
+      print '############################'
+      print '#       Identities         #'
+      print '############################'
+      table.add_rows(result)
+      print table.draw()      
+  
   elif args.command == 'port_forwards':
     if args.list:
       print 'list port forwards'
+  
   elif args.command == 'snippets':
+    try:
+      snippets = objects[u'com.sonelli.juicessh.models.Snippet']
+    except KeyError:
+      print 'No snippets are available'
+      exit()
     if args.list:
-      print 'list snippets'
+      print '############'
+      print '# Snippets #'
+      print '############'
+      for v in snippets:
+        print '"%s"' % v[u'name']
+        print '-' * (len(v[u'name'])+2)
+        print v[u'content']
+        print '=' * 25
+    elif args.get != None:
+      for v in snippets:
+        if v[u'name'] == args.get:
+          print 'Snippet content:'
+          print '################'
+          print v[u'content']
+          exit()
+      print 'No snippet with that name is available.'
+      exit()
