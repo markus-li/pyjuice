@@ -32,6 +32,7 @@ daemon_stdout_file = '~/.pyjuice.daemon_stdout'
 daemon_stderr_file = '~/.pyjuice.daemon_stderr'
 client_id = '384598528408-g6urjkc21c6u9kv1gchu4b6rl0il7p0l.apps.googleusercontent.com'
 client_secret = 'cka5jVJHSS49e6_8PyntUgXx'
+prog_version = '0.1'
 
 # Libraries
 import requests
@@ -47,6 +48,7 @@ import setproctitle
 import resource
 import datetime, time
 from pprint import pprint
+from texttable import Texttable
 import getpass
 import uuid
 from requests_oauthlib import OAuth2Session
@@ -91,7 +93,7 @@ class AESCipher:
     """
     Requires b64 data separated by # to decrypt
     """
-    # TODO: Verify the data and add a try statement
+    # TODO: Verify the data and add a try statement?
     salt, iv, cipher_text = b64_data.split('#', 3)
     salt = base64.standard_b64decode(salt)
     iv = base64.standard_b64decode(iv)
@@ -219,6 +221,29 @@ class AESCipherClient:
 class OldData(Exception):
   pass
 
+def get_local_encrypted():
+  try:
+    cloudsync = json.load(open(os.path.expanduser(encrypted_data_file)))
+    print "Retrieved previously stored encrypted data..."
+    print 'Last sync %s, local system time.' % datetime.datetime.fromtimestamp(cloudsync[u'date']).strftime('%Y-%m-%d %H:%M:%S')
+    return cloudsync
+  except (ValueError, IOError) as e:
+    print "No valid encrypted data found locally, run '%s sync' to update..." % parser.prog
+    exit(1)
+
+def num_unique_id_in_dict(d, key):
+  try:
+    a = d[key]
+  except KeyError:
+    return 0
+  unique = {}
+  for v in a:
+    if '_id' in v:
+      unique[v['_id']] = True
+    elif 'id' in v:
+      unique[v['id']] = True
+  return len(unique)
+
 # Variables used by the script
 redirect_uri = 'urn:ietf:wg:oauth:2.0:oob'
 authorization_base_url = 'https://accounts.google.com/o/oauth2/auth'
@@ -232,36 +257,113 @@ unix_socket_expanded = os.path.expanduser(unix_socket)
 # Any and all files we create should be restricted to the current user ONLY!
 os.umask(077)
 
-parser = argparse.ArgumentParser(prog='pyjuice', description='pyJuice is an open source tool for retrieving and decrypting your ' +
-         'latest JuiceSSH CloudSync backup and extracting the private keys into ~/.ssh.')
-parser.add_argument('-p', '--passphrase', type=str, required=False, help='Set the passphrase (INSECURE!). Do NOT use this unless ' +
-         'you KNOW that noone can list your process and get your argument. Clean your history after using this!')
-parser.add_argument('-n', '--no_daemon', action="store_true", required=False, help='If set, no daemon will be used for decrytion, ' +
-         'even if present. Ignored if -d/--daemon is set.')
-parser.add_argument('-d', '--daemon', action="store_true", required=False, help='Runs pyJuice as a daemon and creates a UNIX domain ' +
-         'socket listening for connections from other instances of pyJuice. pyJuice clients can ask for encryption/decryption of data ' +
-         'without knowing the passphrase. Only one daemon per user is possible. The socket is owned by the user running the daemon ' +
-         'and only read/writable by the owner.')
-parser.add_argument('-a', '--decryptall', action="store_true", required=False, help='This decrypts ALL data, including passwords(!), ' +
-         'into %r. (DANGEROUS!)' % decrypted_json_file)
-parser.add_argument('-c', '--console', action="store_true", required=False, help=argparse.SUPPRESS) # Keeps the daemon from forking
-parser.add_argument('-t', '--testclient', action="store_true", required=False, help=argparse.SUPPRESS)
-parser.add_argument('-e', '--testdecrypt', action="store_true", required=False, help=argparse.SUPPRESS)
+parser = argparse.ArgumentParser(description='pyJuice is a GPLv3 open source tool for interacting with JuiceSSH CloudSync. JuiceSSH for Android can be found at https://sonelli.com')
 
+parser.add_argument('-v', '--version', action='version', version='%(prog)s v' + prog_version)
+
+general_group = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,add_help=False)
+general_group.add_argument('-p', '--passphrase', type=str, required=False, help='Set the passphrase (INSECURE!) used for encryption/decryption. ' +
+         'Do NOT use this unless you KNOW that noone can list your process and get your argument. Clean your history after using this!')
+extra_group = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,add_help=False)
+extra_group.add_argument('-n', '--no_daemon', action="store_true", required=False, help='If set, no daemon will be used for ' +
+         'encryption/decryption, even if present.')
+
+
+subparsers = parser.add_subparsers(title="Commands", dest='command', metavar='{daemon, sync, connections, identities, port_forwards, snippets}' )
+
+daemon_help = ('Runs pyJuice as a daemon and creates a UNIX domain socket listening for connections from other instances ' +
+         'of pyJuice. pyJuice clients can ask for encryption/decryption of data without knowing the passphrase. Only one ' +
+         'daemon per user is possible. The socket is owned by the user running the daemon and only read/writable by the owner.')
+parser_daemon = subparsers.add_parser('daemon', description=daemon_help, help=daemon_help, parents=[general_group])
+parser_daemon.add_argument('-c', '--console', action='store_true', required=False, help='Prevents the daemon from forking and keeps it in the calling console.')
+
+sync_help = ('Used for syncing against JuiceSSH CloudSync. An encrypted copy of the json data is saved in %r, the raw copy is saved in %r.' % (encrypted_json_file, encrypted_data_file))
+parser_sync = subparsers.add_parser('sync', description=sync_help, help=sync_help, parents=[general_group,extra_group])
+parser_sync.add_argument('-a', '--decryptall', action="store_true", required=False, help='Decrypts ALL data, including passwords(!), ' +
+         'into %r. (DANGEROUS!)' % decrypted_json_file)
+parser_sync.add_argument('-k', '--privatekeys', action="store_true", required=False, help='If set, all private keys available from ' +
+         'CloudSync will be decrypted and extracted to \'~/.ssh/\'. This could be potentially DANGEROUS, make sure all your private keys are ' + 
+         'protected by a passphrase.')
+parser_sync.add_argument('-f', '--force', action="store_true", required=False, help='If set, a new copy of the backup will be retrieved ' +
+         'from CloudSync, even if the last update occured less than 30 minutes ago.')
+parser_sync.add_argument('-s', '--status', action="store_true", required=False, help='Show statistics about locally available data (if any) and then exits immediately.')
+
+connections_help = 'Manage and display Connections.'
+parser_connections = subparsers.add_parser('connections', description=connections_help, help=connections_help, parents=[general_group,extra_group])
+parser_connections.add_argument('-l', '--list', action="store_true", required=False, help='Decrypt and list all available Connections.')
+
+identities_help = 'Manage and display Identities.'
+parser_identities = subparsers.add_parser('identities', description=identities_help, help=identities_help, parents=[general_group,extra_group])
+parser_identities.add_argument('-l', '--list', action="store_true", required=False, help='Decrypt and list all available Identities.')
+
+port_forwards_help = 'Manage and use Port Forwards.'
+parser_port_forwards = subparsers.add_parser('port_forwards', description=port_forwards_help, help=port_forwards_help, parents=[general_group,extra_group])
+parser_port_forwards.add_argument('-l', '--list', action="store_true", required=False, help='Decrypt and list all available Port Forwards.')
+
+snippets_help = 'Manage and display Snippets.'
+parser_snippets = subparsers.add_parser('snippets', description=snippets_help, help=snippets_help, parents=[general_group,extra_group])
+parser_snippets.add_argument('-l', '--list', action="store_true", required=False, help='Decrypt and list all available Snippets.')
+
+parser_debug = subparsers.add_parser('debug', description='Hidden command used for debugging and testing only.', parents=[general_group,extra_group])
+parser_debug.add_argument('-t', '--testclient', action="store_true", required=False, help='testclient')
+parser_debug.add_argument('-y', '--testcrypt', action="store_true", required=False, help='testcrypt')
 
 args = parser.parse_args()
+#pprint(args)
 
-# TODO: Check to see if there is a live decryption/encryption daemon available to us
-live_daemon = False
-if args.daemon:
-  args.no_daemon = False
+# Change the process title to hide potentially private data.
+setproctitle.setproctitle('%s %s' % (parser.prog, args.command))
+
+# If sync status is all we want, return that
+if args.command == 'sync' and args.status:
+  cloudsync = get_local_encrypted()
+  connections = 0; connection_groups = 0; identities = 0
+  snippets = 0; port_forwards = 0; amazon_ec2 = 0; config_items = 0
+  try:
+    objects = cloudsync[u'objects']
+    connections = num_unique_id_in_dict(objects, u'com.sonelli.juicessh.models.Connection')
+    connection_groups = num_unique_id_in_dict(objects, u'com.sonelli.juicessh.models.ConnectionGroup')
+    identities = num_unique_id_in_dict(objects, u'com.sonelli.juicessh.models.Identity')
+    snippets = num_unique_id_in_dict(objects, u'com.sonelli.juicessh.models.Snippet')
+    port_forwards = num_unique_id_in_dict(objects, u'com.sonelli.juicessh.models.PortForward')
+  except KeyError:
+    pass
+  config_items = num_unique_id_in_dict(cloudsync, u'configs')
   
-if not args.no_daemon:
+  table = Texttable()
+  table.set_deco(Texttable.HEADER)
+  table.set_cols_dtype(['t','i'])
+  table.set_cols_align(['l', 'c'])
+  print
+  print 'Remote Backups'
+  print '############################'
+  print 'Items currently in Cloudsync'
+  print
+  table.add_rows([['Type', 'Amount'],
+                  ['Connections', connections],
+                  ['Connection Groups', connection_groups],
+                  ['Identities', identities],
+                  ['Snippets', snippets],
+                  ['Port Forwards', port_forwards],
+                  ['Amazon EC2 Link Profiles*', amazon_ec2],
+                  ['Config Items', config_items]])
+  print table.draw()
+  print '* not implemented'
+  exit()
+
+live_daemon = False
+if args.command == 'daemon':
+  no_daemon = False
+else:
+  no_daemon = args.no_daemon
+ 
+if (args.command == 'daemon' or
+    not no_daemon):
   print "Checking for a live daemon..."
   decryptor_test = AESCipherClient(unix_socket_expanded)
-  live_daemon=decryptor_test.test(skip_safety_check=args.daemon)
+  live_daemon=decryptor_test.test(skip_safety_check=(args.command == 'daemon'))
 
-  if args.daemon and live_daemon:
+  if args.command == 'daemon' and live_daemon:
     print 'Only ONE live daemon can exist per user!'
     print 'You will have to manually kill it with "kill `cat ~/.pyjuice.daemon_pid`" in order to run a new one. Exiting...'
     # TODO: Maybe add option to kill the old daemon and start a new one?
@@ -270,7 +372,7 @@ if not args.no_daemon:
 if live_daemon:
   print 'Live daemon found!'
 else:
-  if not args.no_daemon:
+  if not no_daemon:
     print 'No live daemon found!'
   if args.passphrase != None and args.passphrase != '':
     passphrase = args.passphrase
@@ -285,9 +387,8 @@ else:
         exit(0)
 
 # If we are to daemonize, we don't need any connection to the API.
-if args.daemon:
+if args.command == 'daemon':
   print 'Spawning pyJuice daemon...'
-  setproctitle.setproctitle('pyjuice --daemon')
   if not args.console:
     try:
       pid = os.fork()
@@ -336,7 +437,8 @@ if args.daemon:
   else:
     print 'Not forking into daemon...'
     
-  # Now we are ready to run the daemon, we only get here in the second child...
+  # Now we are ready to run the daemon, we only get here in the second child
+  # or when in console mode...
   try:
     os.unlink(unix_socket_expanded)
   except OSError:
@@ -420,253 +522,262 @@ if args.daemon:
       except NameError:
         pass
   exit()
-
-############################ DEBUG TOOLS ONLY ############################
-if args.testdecrypt:
-  # This is a hidden function used only for debugging/testing the decryption & encryption...
-  decryptor = AESCipher(passphrase)
-  plain_1 = '{"count":0,"content":"content snip 2","isEncrypted":false,"name":"snip2"}'
-  print "plain_1: %r" % plain_1
-  encrypt_1 = decryptor.encrypt(plain_1)
-  print "encrypt_1: %r" % encrypt_1
-  plain_2 = decryptor.decrypt(encrypt_1)
-  print "plain_2: %r" % plain_2
-  exit()
-  
-if args.testclient:
-  # This is a hidden function used only for debugging the daemon...
-  print "Testclient..."
-  sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-  print >>sys.stderr, 'connecting to %s' % unix_socket
-  try:
-    sock.connect(unix_socket_expanded)
-  except socket.error, msg:
-    print >>sys.stderr, msg
-    exit(1)
-  
-  try:
-    # Send data
-    message = 'DECRYPT::asd'
-    print >>sys.stderr, 'sending "%s"' % message
-    sock.send( '--START--' )
-    sock.sendall(message)
-    sock.send( '--DONE---' )
-        
-    save_data = False
-    data_buf = ''
-    while True:
-      data = sock.recv(16)
-      print >>sys.stderr, 'received "%s"' % data
-      if data:
-        if save_data:
-          data_buf += data
-        if '--START--' == data[:9]:
-          save_data = True
-          data_buf = data[9:]
-        elif '--DONE---' == data_buf[-9:]:
-          save_data = False
-          data_buf = data_buf[:-9]
-          print >>sys.stderr, 'Got this back from the server:\n%r' % base64.standard_b64decode(data_buf)
-          break
-      else:
-        print >>sys.stderr, 'no more data from server'
-        break
-  except NameError:
-    pass        
-  finally:
-    print >>sys.stderr, 'closing socket'
-    sock.close()
-  exit()
-############################ END DEBUG TOOLS #############################
-
-# Make sure we have a token using Google oauth2
-token_updated = False
-try:
-  token = json.load(open(os.path.expanduser(token_file)))
-  print "Retrieved previously stored token..."
-  oauth = OAuth2Session(client_id, token=token)
-  
-  if time.time() - token['timestamp'] >= token['expires_in']:
-    print "Refreshing token..."
-    extra = {'client_id': client_id,
-             'client_secret': client_secret,}
-    token = oauth.refresh_token(token_url, **extra)
-    token_updated = True
-except (ValueError, IOError) as e:
-  print 'No refresh_token saved, user need to provide authorization...'
-  
-  oauth = OAuth2Session(client_id, scope=scope, redirect_uri=redirect_uri)
-  
-  authorization_url, state = oauth.authorization_url(authorization_base_url, access_type='offline', approval_prompt='force')
-  
-  print "Follow this URL to authorize access for pyJuice:"
-  print authorization_url
-    
-  user_code = raw_input('Paste the user code here:')
-  
-  token = oauth.fetch_token(token_url, client_secret=client_secret, code=user_code)
-  token_updated = True
-
-# In case the token was updated, write it to file with a new timestamp.
-if token_updated:
-  print "Token updated, saving to %s..." % token_file
-  token['timestamp'] = time.time()
-  json.dump(token, open(os.path.expanduser(token_file), 'w'))
-
-
-try:
-  cloudsync = json.load(open(os.path.expanduser(encrypted_data_file)))
-  if datetime.datetime.now() - datetime.datetime.fromtimestamp(cloudsync[u'date']) >= datetime.timedelta(minutes=30):
-    print "Time to update the data from CloudSync..."
-    raise OldData
-  print "Retrieved previously stored encrypted data..."
-  
-except (ValueError, IOError, OldData) as e:
-  print "No up-to-date encrypted data found locally, retreiving it from Sonelli CloudSync..."
-  #print('---------------')
-  r = requests.get("https://api.sonelli.com/authenticate/%s" % (token['access_token']))
-  authenticate = r.json()
-  cookies = dict(session=authenticate[u'session'][u'identifier'])
-  #print('---------------')
-  
-  r = requests.post('https://api.sonelli.com/cloudsync', cookies=cookies)
-  cloudsync = r.json()
-  json.dump(cloudsync, open(os.path.expanduser(encrypted_data_file), 'w'))
-  # Save the encrypted version in a pretty format as well
-  pprint(cloudsync, open(os.path.expanduser(encrypted_json_file), 'w'))
-
-
-#pprint(cloudsync)
-#print datetime.datetime.fromtimestamp(cloudsync[u'date']).strftime('%Y-%m-%d %H:%M:%S')
-
-if args.decryptall:
-  # This decrypts everything into a json-file (except team data currently).
-  print 'Decrypting everything...'
-  #print uuid.uuid4()
-  if live_daemon:
-    print 'Using pyJuice daemon for decryption...'
-    decryptor = AESCipherClient(unix_socket_expanded)
-  else:  
-    print 'Using locally available passphrase for decryption...'
+elif args.command == 'debug':
+  ############################ DEBUG TOOLS ONLY ############################
+  if args.testcrypt:
+    # This is a hidden function used only for debugging/testing the decryption & encryption...
     decryptor = AESCipher(passphrase)
+    plain_1 = '{"count":0,"content":"content snip 2","isEncrypted":false,"name":"snip2"}'
+    print "plain_1: %r" % plain_1
+    encrypt_1 = decryptor.encrypt(plain_1)
+    print "encrypt_1: %r" % encrypt_1
+    plain_2 = decryptor.decrypt(encrypt_1)
+    print "plain_2: %r" % plain_2
+    exit()
+    
+  if args.testclient:
+    # This is a hidden function used only for debugging the daemon...
+    print "Testclient..."
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    print >>sys.stderr, 'connecting to %s' % unix_socket
+    try:
+      sock.connect(unix_socket_expanded)
+    except socket.error, msg:
+      print >>sys.stderr, msg
+      exit(1)
+    
+    try:
+      # Send data
+      message = 'DECRYPT::asd'
+      print >>sys.stderr, 'sending "%s"' % message
+      sock.send( '--START--' )
+      sock.sendall(message)
+      sock.send( '--DONE---' )
+          
+      save_data = False
+      data_buf = ''
+      while True:
+        data = sock.recv(16)
+        print >>sys.stderr, 'received "%s"' % data
+        if data:
+          if save_data:
+            data_buf += data
+          if '--START--' == data[:9]:
+            save_data = True
+            data_buf = data[9:]
+          elif '--DONE---' == data_buf[-9:]:
+            save_data = False
+            data_buf = data_buf[:-9]
+            print >>sys.stderr, 'Got this back from the server:\n%r' % base64.standard_b64decode(data_buf)
+            break
+        else:
+          print >>sys.stderr, 'no more data from server'
+          break
+    except NameError:
+      pass        
+    finally:
+      print >>sys.stderr, 'closing socket'
+      sock.close()
+    exit()
+  ############################ END DEBUG TOOLS #############################
+elif args.command == 'sync':
+  # Make sure we have a token using Google oauth2
+  token_updated = False
+  try:
+    token = json.load(open(os.path.expanduser(token_file)))
+    print "Retrieved previously stored token..."
+    oauth = OAuth2Session(client_id, token=token)
+    
+    if time.time() - token['timestamp'] >= token['expires_in']:
+      print "Refreshing token..."
+      extra = {'client_id': client_id,
+               'client_secret': client_secret,}
+      token = oauth.refresh_token(token_url, **extra)
+      token_updated = True
+  except (ValueError, IOError) as e:
+    print 'No refresh_token saved, user need to provide authorization...'
+    
+    oauth = OAuth2Session(client_id, scope=scope, redirect_uri=redirect_uri)
+    
+    authorization_url, state = oauth.authorization_url(authorization_base_url, access_type='offline', approval_prompt='force')
+    
+    print "Follow this URL to authorize access for pyJuice:"
+    print authorization_url
+      
+    user_code = raw_input('Paste the user code here:')
+    
+    token = oauth.fetch_token(token_url, client_secret=client_secret, code=user_code)
+    token_updated = True
   
-  def itterate_dict( data ):
-    new_data = {}
-    for key, value in data.iteritems():
-      if isinstance(value, list):
-        #print "%r is an array" % key
-        new_data[key] = itterate_array( value )
-      elif isinstance(value, dict):
-        #print "%r is a dict" % key
-        new_data[key] = itterate_dict( value )
-      elif isinstance(value, (unicode, str)):
-        if value != '':
-          try:
-            new_value = decryptor.decrypt(value)
-          except ValueError:
-            new_value = u''
-          if new_value != '':
-            value = new_value
-        if key == u'data':
-          json_data = None
-          try:
-            json_data = json.loads(value)
-          except ValueError:
-            pass
-          if isinstance(json_data, dict):
-            for subkey, subvalue in json_data.iteritems():
-              if subvalue != '':
-                try:
-                  new_subvalue = decryptor.decrypt(subvalue)
-                except ValueError:
-                  new_subvalue = u''
-                if new_subvalue != '':
-                  subvalue = new_subvalue
-              new_data[subkey] = subvalue
+  # In case the token was updated, write it to file with a new timestamp.
+  if token_updated:
+    print "Token updated, saving to %s..." % token_file
+    token['timestamp'] = time.time()
+    json.dump(token, open(os.path.expanduser(token_file), 'w'))
+
+
+  try:
+    cloudsync = json.load(open(os.path.expanduser(encrypted_data_file)))
+    if datetime.datetime.now() - datetime.datetime.fromtimestamp(cloudsync[u'date']) >= datetime.timedelta(minutes=30):
+      print "Time to update the data from CloudSync..."
+      raise OldData
+    elif args.force:
+      print "Forcing update of the data from JuiceSSH CloudSync..."
+      raise OldData
+    print "Retrieved previously stored encrypted data..."
+    
+  except (ValueError, IOError, OldData) as e:
+    if not args.force:
+      print "No up-to-date encrypted data found locally, retreiving it from JuiceSSH CloudSync..."
+    #print('---------------')
+    r = requests.get("https://api.sonelli.com/authenticate/%s" % (token['access_token']))
+    authenticate = r.json()
+    cookies = dict(session=authenticate[u'session'][u'identifier'])
+    #print('---------------')
+    
+    r = requests.post('https://api.sonelli.com/cloudsync', cookies=cookies)
+    cloudsync = r.json()
+    json.dump(cloudsync, open(os.path.expanduser(encrypted_data_file), 'w'))
+    # Save the encrypted version in a pretty format as well
+    pprint(cloudsync, open(os.path.expanduser(encrypted_json_file), 'w'))
+  
+  #pprint(cloudsync)
+  #print datetime.datetime.fromtimestamp(cloudsync[u'date']).strftime('%Y-%m-%d %H:%M:%S')
+  if args.privatekeys:
+    identities = cloudsync[u'objects'][u'com.sonelli.juicessh.models.Identity']
+    
+    #pprint(identities)
+    i=0
+    for identity in identities:
+      if identity[u'_encrypted']:
+        # https://github.com/Sonelli/gojuice/blob/master/crypto/aes/aes.go
+        print '============================'
+        print 'The data is encrypted!'
+        data = identity[u'data']
+        
+        if live_daemon:
+          print 'Using pyJuice daemon for decryption...'
+          decryptor = AESCipherClient(unix_socket_expanded)
+        else:  
+          print 'Using locally available passphrase for decryption...'
+          decryptor = AESCipher(passphrase)
+        text = decryptor.decrypt(data)
+        try:
+          json_data = json.loads(text)
+        except ValueError:
+          print 'The decryption FAILED! Either the data is corrupt or the passphrase is incorrect...'
+          exit(5)
+        #print '----------------------'
+        #pprint(json_data)
+        
+        print '----------------------'
+        try:
+          json_data[u'password'] = decryptor.decrypt(json_data[u'password'])
+        except (KeyError, ValueError) as e:
+          json_data[u'password'] = ''
+          pass
+        try:
+          json_data[u'privatekey'] = decryptor.decrypt(json_data[u'privatekey'])
+        except (KeyError, ValueError) as e:
+          json_data[u'privatekey'] = ''
+          pass
+        try:
+          json_data[u'privatekeyPassword'] = decryptor.decrypt(json_data[u'privatekeyPassword'])
+        except (KeyError, ValueError) as e:
+          json_data[u'privatekeyPassword'] = ''
+          pass
+        print 'The data was successfully decrypted!'
+        #pprint(json_data)
+        print "----------------------"
+        private_key_filename = '~/.ssh/' + 'juice_' + json_data[u'nickname'] + '_' + str(i)
+        if json_data[u'privatekey'] != '':
+          private_key_file = open(os.path.expanduser(private_key_filename), "w")
+          private_key_file.write(json_data[u'privatekey'])
+          private_key_file.close()
+          print "Created/updated %r..." % str(private_key_filename)
+        else:
+          print "No data for %r available, skipping..." % str(private_key_filename)
+        
+      i+=1  
+  if args.decryptall:
+    # This decrypts everything into a json-file (except team data currently).
+    print 'Decrypting everything...'
+    #print uuid.uuid4()
+    if live_daemon:
+      print 'Using pyJuice daemon for decryption...'
+      decryptor = AESCipherClient(unix_socket_expanded)
+    else:  
+      print 'Using locally available passphrase for decryption...'
+      decryptor = AESCipher(passphrase)
+    
+    def itterate_dict( data ):
+      new_data = {}
+      for key, value in data.iteritems():
+        if isinstance(value, list):
+          #print "%r is an array" % key
+          new_data[key] = itterate_array( value )
+        elif isinstance(value, dict):
+          #print "%r is a dict" % key
+          new_data[key] = itterate_dict( value )
+        elif isinstance(value, (unicode, str)):
+          if value != '':
+            try:
+              new_value = decryptor.decrypt(value)
+            except (ValueError, AttributeError) as e:
+              new_value = u''
+            if new_value != '':
+              value = new_value
+          if key == u'data':
+            json_data = None
+            try:
+              json_data = json.loads(value)
+            except ValueError:
+              pass
+            if isinstance(json_data, dict):
+              for subkey, subvalue in json_data.iteritems():
+                if subvalue != '':
+                  try:
+                    new_subvalue = decryptor.decrypt(subvalue)
+                  except (ValueError, AttributeError) as e:
+                    new_subvalue = u''
+                  if new_subvalue != '':
+                    subvalue = new_subvalue
+                new_data[subkey] = subvalue
+            else:
+              new_data[key] = value
           else:
             new_data[key] = value
         else:
+          #print "%r is something else" % key
           new_data[key] = value
-      else:
-        #print "%r is something else" % key
-        new_data[key] = value
-    return new_data
-  
-  def itterate_array( data ):
-    new_data = []
-    for value in data:
-      if isinstance(value, list):
-        #print "this is an array"
-        new_data.append(itterate_array( value ))
-      elif isinstance(value, dict):
-        #print "this is a dict"
-        new_data.append(itterate_dict( value ))
-      else:
-        #print "this is something else"
-        new_data.append(value)
-    return new_data
-  
-  if isinstance(cloudsync, dict):
-    cloudsync_decrypted = itterate_dict(cloudsync)
-    #pprint(cloudsync_decrypted)
-    pprint(cloudsync_decrypted, open(os.path.expanduser(decrypted_json_file), 'w'))
-  else:
-    print 'The CloudSync data is faulty! It should be a dict!'
-    exit(1)
-  print 'Decryption of all data completed!'
+      return new_data
+    
+    def itterate_array( data ):
+      new_data = []
+      for value in data:
+        if isinstance(value, list):
+          #print "this is an array"
+          new_data.append(itterate_array( value ))
+        elif isinstance(value, dict):
+          #print "this is a dict"
+          new_data.append(itterate_dict( value ))
+        else:
+          #print "this is something else"
+          new_data.append(value)
+      return new_data
+    
+    if isinstance(cloudsync, dict):
+      cloudsync_decrypted = itterate_dict(cloudsync)
+      #pprint(cloudsync_decrypted)
+      pprint(cloudsync_decrypted, open(os.path.expanduser(decrypted_json_file), 'w'))
+    else:
+      print 'The CloudSync data is faulty! It should be a dict!'
+      exit(1)
+    print 'Decryption of all data completed!'
+
 else:
-  identities = cloudsync[u'objects'][u'com.sonelli.juicessh.models.Identity']
-  
-  #pprint(identities)
-  i=0
-  for identity in identities:
-    if identity[u'_encrypted']:
-      # https://github.com/Sonelli/gojuice/blob/master/crypto/aes/aes.go
-      print '============================'
-      print 'The data is encrypted!'
-      data = identity[u'data']
-      
-      if live_daemon:
-        print 'Using pyJuice daemon for decryption...'
-        decryptor = AESCipherClient(unix_socket_expanded)
-      else:  
-        print 'Using locally available passphrase for decryption...'
-        decryptor = AESCipher(passphrase)
-      text = decryptor.decrypt(data)
-      try:
-        json_data = json.loads(text)
-      except ValueError:
-        print 'The decryption FAILED! Either the data is corrupt or the passphrase is incorrect...'
-        exit(5)
-      #print '----------------------'
-      #pprint(json_data)
-      
-      print '----------------------'
-      try:
-        json_data[u'password'] = decryptor.decrypt(json_data[u'password'])
-      except (KeyError, ValueError) as e:
-        json_data[u'password'] = ''
-        pass
-      try:
-        json_data[u'privatekey'] = decryptor.decrypt(json_data[u'privatekey'])
-      except (KeyError, ValueError) as e:
-        json_data[u'privatekey'] = ''
-        pass
-      try:
-        json_data[u'privatekeyPassword'] = decryptor.decrypt(json_data[u'privatekeyPassword'])
-      except (KeyError, ValueError) as e:
-        json_data[u'privatekeyPassword'] = ''
-        pass
-      print 'The data was successfully decrypted!'
-      #pprint(json_data)
-      print "----------------------"
-      private_key_filename = '~/.ssh/' + 'juice_' + json_data[u'nickname'] + '_' + str(i)
-      if json_data[u'privatekey'] != '':
-        private_key_file = open(os.path.expanduser(private_key_filename), "w")
-        private_key_file.write(json_data[u'privatekey'])
-        private_key_file.close()
-        print "Created/updated %r..." % str(private_key_filename)
-      else:
-        print "No data for %r available, skipping..." % str(private_key_filename)
-      
-    i+=1  
+  cloudsync = get_local_encrypted()
+  print "ready for more!"
+
+
+

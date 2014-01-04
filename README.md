@@ -5,14 +5,18 @@ pyjuice
 
 pyJuice is an open source tool for retrieving and decrypting your latest JuiceSSH CloudSync 
 backup and extracting the private keys into ~/.ssh.
+SOON: It can also be used to keep track of all your server credentials and let you directly use the data you have entered in JuiceSSH.
 
-In order to have any use of this script you need to have the PRO version of JuiceSSH (https://sonelli.com/) and have CloudSync turned ON.
+In order to have any use of this script you need to have the PRO version of JuiceSSH (https://sonelli.com/) and have CloudSync turned ON and include Identities.
 
 * Obtains an OAUTH2 authentication token from Google API
 * Authenticates with the JuiceSSH API
 * Retrieves your latest encrypted CloudSync backup in JSON format
 * Decrypts the backup using a user provided passphrase
 * Saves the private keys in ~/.ssh with permission 0600
+
+This tool is used as part of daily work, if and when bugs are discovered they are fixed, but no thourough testing has been performed nor any unit testing implemented. 
+With this said, the tool works and is a great way of handling multiple server credentials in a secure way.
 
 ##NOTE
 
@@ -38,14 +42,14 @@ In the future I might split it and create an auto-merged version, but for now, t
 
 ## Install
 
-First download and install Python 2.7. 
+First download and install Python 2.7 and pip. 
 On Ubuntu this is as easy as:
 
 ```bash
 $ sudo apt-get update && sudo apt-get install python2.7 python-pip python2.7-dev
 ```
 
-For other platforms use your packet manager (if any) or download from an installer from http://www.python.org/getit/.
+For other platforms use your packet manager (if any) or download an installer from http://www.python.org/getit/.
 
 ```bash
 # Fetch the source
@@ -53,7 +57,7 @@ $ cd ~
 $ git clone https://github.com/markus-li/pyjuice.git pyjuice
 
 # Get required modules (use virtualenv if you want/need)
-$ sudo pip install requests argparse requests-oauthlib passlib pycrypto setproctitle
+$ sudo pip install requests argparse requests-oauthlib passlib pycrypto setproctitle texttable
 ```
 
 ## Usage
