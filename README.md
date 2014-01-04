@@ -24,18 +24,17 @@ In the future I might split it and create an auto-merged version, but for now, t
 * Better error-handling
 * Only update files if timestamp has changed for entry.
 * Handle deleted identities(?)
-* Make sure the daemon does NOT crash/hang when sent garbage. This should be the case now, but tests need to be written.
-* Add logging facilities to the daemon?
-* Scramble the passphrase in memory when not in direct use by the daemon? How necessary is this?
-* Fork each connection to the daemon to handle simultaneous connections. Is this really needed?
-* Come up with more features to implement
-* Allow forcing update of the encrypted json file and not just every 30 minutes.
-* Full READ support for everything in the backup I use in the app.
-* Full READ support for the remaining data. Since I don't use EC2, I won't implement support for that though.
+* Allow forcing update of the encrypted json file from CloudSync, and not just maximum every 30 minutes.
+* Full READ support for everything in the backup except EC2-related entries.
 * Don't update com.sonelli.juicessh.models.ConnectionCounter, at least for now
 * Encrypt and upload changes. Need full READ support of everything I use first.
-* Remove unneeded output and add actual debug output instead.
+* Come up with more features to implement
+* Make sure the daemon does NOT crash/hang when sent garbage. This should be the case now, but tests need to be written.
+* Add logging facilities to the daemon?
+* Fork each connection to the daemon to handle simultaneous connections. Is this really needed?
 * Write tests (any volunters?)
+* Full READ support for the remaining data, including EC2-related entries. I won't implement support for that though since I don't use it.
+* ~~Scramble the passphrase in memory when not in direct use by the daemon? How necessary is this?~~Not feasibly achieved in Python, can be done, but "shouldn't" be done...
 
 ## Install
 
@@ -54,7 +53,6 @@ $ cd ~
 $ git clone https://github.com/markus-li/pyjuice.git pyjuice
 
 # Get required modules (use virtualenv if you want/need)
-# 
 $ sudo pip install requests argparse requests-oauthlib passlib pycrypto setproctitle
 ```
 
@@ -79,7 +77,14 @@ com.sonelli.juicessh.models.Team:
 What is encryptionTest?
 
 com.sonelli.juicessh.models.TeamEncryption:
-How is data encrypted?
+How is data encrypted here?
+What is encrypted here?
+
+## Bugs, Features & Pull requests
+
+Please reports bugs through the Issues section at GitHub (https://github.com/markus-li/pyjuice/issues). Feature requests are also very welcome. 
+
+If you want to fix or add something yourself, please do so and send me a pull request.
 
 ## Credits and License
 

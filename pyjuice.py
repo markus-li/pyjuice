@@ -76,13 +76,16 @@ class AESCipher:
 
   def encrypt( self, raw ):
     """
-    Returns encrypted value encoded in b64 with salt, iv and cipher text
-    separated by #.
+    Returns the encrypted value encoded in b64 with salt, 
+    iv and cipher text separated by #.
     """
     raw = pad(raw)
-    iv = Random.new().read(AES.block_size);
-    cipher = AES.new( self.key, AES.MODE_CBC, iv )
-    return ( iv + cipher.encrypt( raw ) )
+    salt = Random.new().read(SALT_LENGTH)
+    iv = Random.new().read(BS)
+    key = pbkdf2(self.passphrase, salt, ITERATION_COUNT, keylen=KEY_LENGTH)
+    cipher = AES.new( key, AES.MODE_CBC, iv )
+    cipher_text = cipher.encrypt( raw )
+    return ( '#'.join([base64.standard_b64encode(salt)+'\n', base64.standard_b64encode(iv)+'\n', base64.standard_b64encode(cipher_text)+'\n']) )
 
   def decrypt( self, b64_data ):
     """
@@ -420,10 +423,14 @@ if args.daemon:
 
 ############################ DEBUG TOOLS ONLY ############################
 if args.testdecrypt:
-  # This is a hidden function used only for debugging the decryption...
+  # This is a hidden function used only for debugging/testing the decryption & encryption...
   decryptor = AESCipher(passphrase)
-  print "testdecrypt with %r" % passphrase
-  print "%r" % decryptor.decrypt('')
+  plain_1 = '{"count":0,"content":"content snip 2","isEncrypted":false,"name":"snip2"}'
+  print "plain_1: %r" % plain_1
+  encrypt_1 = decryptor.encrypt(plain_1)
+  print "encrypt_1: %r" % encrypt_1
+  plain_2 = decryptor.decrypt(encrypt_1)
+  print "plain_2: %r" % plain_2
   exit()
   
 if args.testclient:
