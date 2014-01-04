@@ -371,6 +371,8 @@ if (args.command == 'daemon' or
 
 if live_daemon:
   print 'Live daemon found!'
+  print 'Using pyJuice daemon for decryption...'
+  decryptor = AESCipherClient(unix_socket_expanded)
 else:
   if not no_daemon:
     print 'No live daemon found!'
@@ -385,6 +387,78 @@ else:
       except KeyboardInterrupt:
         print 'Exiting...'
         exit(0)
+  print 'Using locally available passphrase for decryption...'
+  decryptor = AESCipher(passphrase)
+
+def itterate_dict_decrypt( data ):
+  new_data = {}
+  for key, value in data.iteritems():
+    if isinstance(value, list):
+      #print "%r is an array" % key
+      new_data[key] = itterate_array( value )
+    elif isinstance(value, dict):
+      #print "%r is a dict" % key
+      new_data[key] = itterate_dict_decrypt( value )
+    elif isinstance(value, (unicode, str)):
+      if value != '':
+        try:
+          new_value = decryptor.decrypt(value)
+        except (ValueError, AttributeError) as e:
+          new_value = u''
+        if new_value != '':
+          value = new_value
+      if key == u'data':
+        json_data = None
+        try:
+          json_data = json.loads(value)
+        except ValueError:
+          pass
+        if isinstance(json_data, dict):
+          for subkey, subvalue in json_data.iteritems():
+            if subvalue != '':
+              try:
+                new_subvalue = decryptor.decrypt(subvalue)
+              except (ValueError, AttributeError) as e:
+                new_subvalue = u''
+              if new_subvalue != '':
+                subvalue = new_subvalue
+            new_data[subkey] = subvalue
+        else:
+          new_data[key] = value
+      else:
+        new_data[key] = value
+    else:
+      #print "%r is something else" % key
+      new_data[key] = value
+  return new_data
+
+def itterate_array( data ):
+  new_data = []
+  for value in data:
+    if isinstance(value, list):
+      #print "this is an array"
+      new_data.append(itterate_array( value ))
+    elif isinstance(value, dict):
+      #print "this is a dict"
+      new_data.append(itterate_dict_decrypt( value ))
+    else:
+      #print "this is something else"
+      new_data.append(value)
+  return new_data
+
+def decrypt_cloudsync(cloudsync):
+  # This decrypts everything into a dict (except team data currently).
+  print 'Decrypting everything...'
+  #print uuid.uuid4()
+
+  if isinstance(cloudsync, dict):
+    cloudsync_decrypted = itterate_dict_decrypt(cloudsync)
+    #pprint(cloudsync_decrypted)
+    print 'Decryption of all data completed!'
+    return cloudsync_decrypted
+  else:
+    print 'The CloudSync data is faulty! It should be a dict!'
+    exit(1)
 
 # If we are to daemonize, we don't need any connection to the API.
 if args.command == 'daemon':
@@ -701,83 +775,21 @@ elif args.command == 'sync':
       i+=1  
   if args.decryptall:
     # This decrypts everything into a json-file (except team data currently).
-    print 'Decrypting everything...'
-    #print uuid.uuid4()
-    if live_daemon:
-      print 'Using pyJuice daemon for decryption...'
-      decryptor = AESCipherClient(unix_socket_expanded)
-    else:  
-      print 'Using locally available passphrase for decryption...'
-      decryptor = AESCipher(passphrase)
-    
-    def itterate_dict( data ):
-      new_data = {}
-      for key, value in data.iteritems():
-        if isinstance(value, list):
-          #print "%r is an array" % key
-          new_data[key] = itterate_array( value )
-        elif isinstance(value, dict):
-          #print "%r is a dict" % key
-          new_data[key] = itterate_dict( value )
-        elif isinstance(value, (unicode, str)):
-          if value != '':
-            try:
-              new_value = decryptor.decrypt(value)
-            except (ValueError, AttributeError) as e:
-              new_value = u''
-            if new_value != '':
-              value = new_value
-          if key == u'data':
-            json_data = None
-            try:
-              json_data = json.loads(value)
-            except ValueError:
-              pass
-            if isinstance(json_data, dict):
-              for subkey, subvalue in json_data.iteritems():
-                if subvalue != '':
-                  try:
-                    new_subvalue = decryptor.decrypt(subvalue)
-                  except (ValueError, AttributeError) as e:
-                    new_subvalue = u''
-                  if new_subvalue != '':
-                    subvalue = new_subvalue
-                new_data[subkey] = subvalue
-            else:
-              new_data[key] = value
-          else:
-            new_data[key] = value
-        else:
-          #print "%r is something else" % key
-          new_data[key] = value
-      return new_data
-    
-    def itterate_array( data ):
-      new_data = []
-      for value in data:
-        if isinstance(value, list):
-          #print "this is an array"
-          new_data.append(itterate_array( value ))
-        elif isinstance(value, dict):
-          #print "this is a dict"
-          new_data.append(itterate_dict( value ))
-        else:
-          #print "this is something else"
-          new_data.append(value)
-      return new_data
-    
-    if isinstance(cloudsync, dict):
-      cloudsync_decrypted = itterate_dict(cloudsync)
-      #pprint(cloudsync_decrypted)
-      pprint(cloudsync_decrypted, open(os.path.expanduser(decrypted_json_file), 'w'))
-    else:
-      print 'The CloudSync data is faulty! It should be a dict!'
-      exit(1)
-    print 'Decryption of all data completed!'
+    pprint(decrypt_cloudsync(cloudsync), open(os.path.expanduser(decrypted_json_file), 'w'))
+    print 'Decrypted data saved to %r.' % decrypted_json_file
 
 else:
   cloudsync = get_local_encrypted()
-  print "ready for more!"
-
-
-
+  cloudsync_decrypted = decrypt_cloudsync(cloudsync)
+  if args.command == 'connections':
+    if args.list:
+      print 'list connections'
+  elif args.command == 'identities':
+    if args.list:
+      print 'list identities'
+  elif args.command == 'port_forwards':
+    if args.list:
+      print 'list port forwards'
+  elif args.command == 'snippets':
+    if args.list:
+      print 'list snippets'

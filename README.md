@@ -28,7 +28,6 @@ In the future I might split it and create an auto-merged version, but for now, t
 * Better error-handling
 * Only update files if timestamp has changed for entry.
 * Handle deleted identities(?)
-* Allow forcing update of the encrypted json file from CloudSync, and not just maximum every 30 minutes.
 * Full READ support for everything in the backup except EC2-related entries.
 * Don't update com.sonelli.juicessh.models.ConnectionCounter, at least for now
 * Encrypt and upload changes. Need full READ support of everything I use first.
@@ -64,7 +63,7 @@ $ sudo pip install requests argparse requests-oauthlib passlib pycrypto setproct
 
 ```bash
 # Run it!
-$ ~/pyjuice/pyjuice.py
+$ ~/pyjuice/pyjuice.py sync
 
 # For help, run this:
 $ ~/pyjuice/pyjuice.py -h
