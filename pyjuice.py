@@ -763,9 +763,87 @@ else:
   except KeyError:
     print 'There are no entries in the CloudSync Backup'
     exit()
+  
+  def get_entries_by_field_data(object_name, field, field_data):
+    try:
+      result = []
+      a = objects[object_name]
+      for d in a:
+        if (field in d and d[field] == field_data):
+          result.append(d)
+    except KeyError:
+      pass
+    finally:
+      return result
+  
   if args.command == 'connections':
+    # The information is spread over multipleplaces, let's make it easier to use.
+    try:
+      connections = objects[u'com.sonelli.juicessh.models.Connection']
+    except KeyError:
+      print 'No connections are available!'
+      exit()
+    typenames = ['ssh', 'mosh', 'local', 'telnet']
+    connections_expanded = []
+    for v in connections:
+      c = {}
+      c['id'] = v[u'_id']
+      c['address'] = v[u'address']
+      c['modified'] = v[u'modified']
+      c['nickname'] = v[u'nickname']
+      c['port'] = v[u'port']
+      c['type'] = v[u'type']
+      identity_mapping = get_entries_by_field_data('com.sonelli.juicessh.models.ConnectionIdentity', 'connection', c['id'])
+      # Even though this looks like a many:many mapping, we only expect maximum one entry per host here.
+      c['identity'] = None
+      if (len(identity_mapping) >= 1 and 'identity' in identity_mapping[0]):
+        identity = get_entries_by_field_data('com.sonelli.juicessh.models.Identity', '_id', identity_mapping[0]['identity'])
+        if len(identity) >= 1:
+          c['identity'] = identity[0]
+      c['connect_via'] = None
+      if 'via' in v:
+        connect_via = get_entries_by_field_data('com.sonelli.juicessh.models.Connection', '_id', v['via'])
+        if len(connect_via) >= 1:
+          c['connect_via'] = connect_via[0]
+      group_mapping = get_entries_by_field_data('com.sonelli.juicessh.models.ConnectionGroupMembership', 'connection', c['id'])
+      c['groups'] = []
+      c['group_names'] = []
+      if len(group_mapping) >= 1:
+        for g in group_mapping:
+          #ConnectionGroup
+          connectionGroup = get_entries_by_field_data('com.sonelli.juicessh.models.ConnectionGroup', '_id', g['group'])
+          # If this is anything but one entry, we can just crash here for now since that means faulty json data :P...
+          c['groups'].append(connectionGroup[0])
+          c['group_names'].append(connectionGroup[0]['name'])
+      connections_expanded.append(c)
     if args.list:
-      print 'list connections'
+      # Nickname, Type, Address, Port, Connect Via, Identity, Groups (many:many)
+      #pprint(connections_expanded)
+      result = [['Nickname', 'Type', 'Address', 'Port', 'Connect Via', 'Identity', 'Groups']]
+      for v in connections_expanded:
+        connect_via = 'Not Set'
+        identity = 'Not Set'
+        groups = 'Not Set'
+        if ('connect_via' in v and v['connect_via'] != None):
+          connect_via = v[u'connect_via'][u'nickname']
+        if ('identity' in v and v['identity'] != None):
+          identity = v[u'identity'][u'nickname']
+        if ('group_names' in v and len(v['group_names']) > 0 ):
+          groups = ', '.join(v['group_names'])
+        if v[u'type'] == 2: # is local device
+          v[u'address'] = 'N/A'
+          v[u'port'] = 0
+        result.append([v[u'nickname'],typenames[v[u'type']], v[u'address'], v[u'port'], connect_via, identity, groups])
+      table = Texttable()
+      table.set_deco(Texttable.HEADER | Texttable.HLINES)
+      table.set_cols_dtype(['t','t', 't', 'i', 't', 't', 't'])
+      table.set_cols_align(['l', 'l', 'l', 'c', 'l', 'l', 'l'])
+      table.set_cols_width([12, 7, 25, 5, 12, 12, 35])
+      print '############################'
+      print '#       Connections        #'
+      print '############################'
+      table.add_rows(result)
+      print table.draw()
       
   elif args.command == 'identities':
     try:
@@ -791,14 +869,14 @@ else:
       table.set_cols_dtype(['t','t', 't', 't', 't'])
       table.set_cols_align(['l', 'l', 'l', 'l', 'l'])
       print '############################'
-      print '#       Identities         #'
+      print '#        Identities        #'
       print '############################'
       table.add_rows(result)
       print table.draw()      
   
   elif args.command == 'port_forwards':
     if args.list:
-      print 'list port forwards'
+      print 'NOT YET IMPLEMENTED: List port forwards'
   
   elif args.command == 'snippets':
     try:
