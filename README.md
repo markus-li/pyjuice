@@ -31,6 +31,7 @@ In the future I might split it and create an auto-merged version, but for now, t
 * Don't update com.sonelli.juicessh.models.ConnectionCounter, at least for now
 * Encrypt and upload changes. Need full READ support of everything I use first.
 * Come up with more features to implement
+* ~~Fix issues with password-only login over ssh. The whole terminal can't be used when pexpect controls the session.~~
 * Handle incorrect json data gracefully instead of crashing.
 * Make sure the daemon does NOT crash/hang when sent garbage. This should be the case now, but tests need to be written.
 * Add logging facilities to the daemon?
