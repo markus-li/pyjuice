@@ -57,7 +57,7 @@ $ cd ~
 $ git clone https://github.com/markus-li/pyjuice.git pyjuice
 
 # Get required modules (use virtualenv if you want/need)
-$ sudo pip install requests argparse requests-oauthlib passlib pycrypto setproctitle texttable
+$ sudo pip install requests argparse requests-oauthlib passlib pycrypto setproctitle texttable pexpect
 ```
 
 ## Usage

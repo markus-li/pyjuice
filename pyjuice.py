@@ -58,6 +58,8 @@ from passlib.utils.pbkdf2 import pbkdf2
 # http://stackoverflow.com/questions/12562021/aes-decryption-padding-with-pkcs5-python
 from Crypto.Cipher import AES
 from Crypto import Random
+from subprocess import call
+import pexpect
 
 # Constants
 ITERATION_COUNT = 1000
@@ -291,6 +293,7 @@ parser_sync.add_argument('-s', '--status', action="store_true", required=False, 
 connections_help = 'Manage and display Connections.'
 parser_connections = subparsers.add_parser('connections', description=connections_help, help=connections_help, parents=[general_group,extra_group])
 parser_connections.add_argument('-l', '--list', action="store_true", required=False, help='Decrypt and list all available Connections.')
+parser_connections.add_argument('-c', '--connect', type=str, required=False, help='Connect to host by Nickname.')
 
 identities_help = 'Manage and display Identities.'
 parser_identities = subparsers.add_parser('identities', description=identities_help, help=identities_help, parents=[general_group,extra_group])
@@ -737,7 +740,7 @@ elif args.command == 'sync':
     #pprint(identities)
     i=0
     for identity in identities:
-      private_key_filename = '~/.ssh/' + 'juice_' + identity[u'nickname'] + '_' + str(i)
+      private_key_filename = '~/.ssh/' + 'juice_' + identity[u'_id']
       try:
         if identity[u'privatekey'] != '':
           private_key_file = open(os.path.expanduser(private_key_filename), "w")
@@ -816,6 +819,13 @@ else:
           c['groups'].append(connectionGroup[0])
           c['group_names'].append(connectionGroup[0]['name'])
       connections_expanded.append(c)
+    def get_connection(nickname):
+      # TODO: Handle multiple entries with the same nickname.
+      for c in connections_expanded:
+        if c['nickname'] == nickname:
+          return c
+      return None
+    
     if args.list:
       # Nickname, Type, Address, Port, Connect Via, Identity, Groups (many:many)
       #pprint(connections_expanded)
@@ -833,7 +843,7 @@ else:
         if v[u'type'] == 2: # is local device
           v[u'address'] = 'N/A'
           v[u'port'] = 0
-        result.append([v[u'nickname'],typenames[v[u'type']], v[u'address'], v[u'port'], connect_via, identity, groups])
+        result.append([v['nickname'],typenames[v['type']], v['address'], v['port'], connect_via, identity, groups])
       table = Texttable()
       table.set_deco(Texttable.HEADER | Texttable.HLINES)
       table.set_cols_dtype(['t','t', 't', 'i', 't', 't', 't'])
@@ -844,6 +854,44 @@ else:
       print '############################'
       table.add_rows(result)
       print table.draw()
+    if args.connect != None:
+      c = get_connection(args.connect)
+      if c == None:
+        print 'No connection with the name \'%s\' could be found. Exiting...' % args.connect
+        exit()
+      if c['type'] != 0:
+        print 'Can\'t connect to \'%s\'. No support for \'%s\' is implemented yet, only SSH is supported at this time.' % (args.connect, typenames[c['type']])
+        exit()
+      # TODO: Add support for Connect Via
+      if ('connect_via' in c and c['connect_via'] != None):
+        print 'There is currently no support for \'Connect Via\' implemented, trying the connection anyway...'
+      print 'Connecting to \'%s\'...' % args.connect
+      if ('identity' in c and c['identity'] != None):
+        if ('password' in c['identity'] and c['identity']['password'] != ''):
+          print 'A password has been detected for \'%s\', but there IS NO SUPPORT for passwords yet.' % args.connect
+          print 'Only key + key passphrase support is implemented. Trying to continue without using the password...'
+        if ('privatekey' in c['identity'] and c['identity']['privatekey'] != ''):
+          private_key_filename = os.path.expanduser('~/.ssh/' + 'juice_' + c['identity'][u'_id'])
+          if not os.path.exists(private_key_filename):
+            print 'Private key specified but not present, run \'%s sync -k\' and then try again...' % parser.prog
+            exit(1)
+          if ('privatekeyPassword' in c['identity'] and c['identity']['privatekeyPassword'] != ''):
+            child = pexpect.spawn('bash -l -c "eval `ssh-agent` && echo \'<begin>\'$SSH_AUTH_SOCK\'#\'$SSH_AGENT_PID\'<end>\' && ssh-add %s"' % private_key_filename)
+            child.expect("<begin>(.*)#(.*)<end>")
+            ssh_auth_sock = child.match.group(1)
+            ssh_agent_pid = child.match.group(2)
+            child.expect('Enter passphrase for .*')
+            child.sendline(c['identity']['privatekeyPassword'])
+            ssh_command = ('SSH_AUTH_SOCK=%s; export SSH_AUTH_SOCK; SSH_AGENT_PID=%s; export SSH_AGENT_PID; ' % (ssh_auth_sock, ssh_agent_pid) + 
+                           '%s ; kill $SSH_AGENT_PID' % ' '.join(['ssh', '-p %d' % c['port'], '%s@%s' % (c['identity'][u'username'], c['address'])]))
+          else:
+            ssh_command = ('eval `ssh-agent` && ssh-add %s && ' % private_key_filename + 
+                           '%s ; kill $SSH_AGENT_PID' % ' '.join(['ssh', '-p %d' % c['port'], '%s@%s' % (c['identity'][u'username'], c['address'])]))
+      else:
+        ssh_command = ' '.join(['ssh', '-p %d' % c['port'], '%s' % c['address']])
+      #print ssh_command
+      call(ssh_command, shell=True)
+      exit()
       
   elif args.command == 'identities':
     try:
@@ -885,9 +933,9 @@ else:
       print 'No snippets are available'
       exit()
     if args.list:
-      print '############'
-      print '# Snippets #'
-      print '############'
+      print '############################'
+      print '#         Snippets         #'
+      print '############################'
       for v in snippets:
         print '"%s"' % v[u'name']
         print '-' * (len(v[u'name'])+2)
