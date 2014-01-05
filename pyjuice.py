@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #
-# pyJuice is an open source tool for retrieving and decrypting your latest JuiceSSH CloudSync 
-# backup and extracting the private keys into ~/.ssh.
+# pyJuice is a GPLv3 open source tool for interacting with JuiceSSH CloudSync. 
+# JuiceSSH for Android can be found at https://sonelli.com
 #
 # 
 #    This file is part of pyJuice.
@@ -866,16 +866,18 @@ else:
       if ('connect_via' in c and c['connect_via'] != None):
         print 'There is currently no support for \'Connect Via\' implemented, trying the connection anyway...'
       print 'Connecting to \'%s\'...' % args.connect
+      ssh_command = ' '.join(['ssh', '-p %d' % c['port'], '%s' % c['address']])
       if ('identity' in c and c['identity'] != None):
-        if ('password' in c['identity'] and c['identity']['password'] != ''):
-          print 'A password has been detected for \'%s\', but there IS NO SUPPORT for passwords yet.' % args.connect
-          print 'Only key + key passphrase support is implemented. Trying to continue without using the password...'
+        #print "identity"
+        ssh_command = ' '.join(['ssh', '-p %d' % c['port'], '%s@%s' % (c['identity'][u'username'], c['address'])])
         if ('privatekey' in c['identity'] and c['identity']['privatekey'] != ''):
+          #print "privatekey"
           private_key_filename = os.path.expanduser('~/.ssh/' + 'juice_' + c['identity'][u'_id'])
           if not os.path.exists(private_key_filename):
             print 'Private key specified but not present, run \'%s sync -k\' and then try again...' % parser.prog
             exit(1)
           if ('privatekeyPassword' in c['identity'] and c['identity']['privatekeyPassword'] != ''):
+            print "Using private key with passphrase specified..."
             child = pexpect.spawn('bash -l -c "eval `ssh-agent` && echo \'<begin>\'$SSH_AUTH_SOCK\'#\'$SSH_AGENT_PID\'<end>\' && ssh-add %s"' % private_key_filename)
             child.expect("<begin>(.*)#(.*)<end>")
             ssh_auth_sock = child.match.group(1)
@@ -885,10 +887,18 @@ else:
             ssh_command = ('SSH_AUTH_SOCK=%s; export SSH_AUTH_SOCK; SSH_AGENT_PID=%s; export SSH_AGENT_PID; ' % (ssh_auth_sock, ssh_agent_pid) + 
                            '%s ; kill $SSH_AGENT_PID' % ' '.join(['ssh', '-p %d' % c['port'], '%s@%s' % (c['identity'][u'username'], c['address'])]))
           else:
+            print "Using private key, no passphrase specified..."
             ssh_command = ('eval `ssh-agent` && ssh-add %s && ' % private_key_filename + 
                            '%s ; kill $SSH_AGENT_PID' % ' '.join(['ssh', '-p %d' % c['port'], '%s@%s' % (c['identity'][u'username'], c['address'])]))
-      else:
-        ssh_command = ' '.join(['ssh', '-p %d' % c['port'], '%s' % c['address']])
+        elif ('password' in c['identity'] and c['identity']['password'] != ''):
+          print "Using password (this currently has issues with using the whole terminal)."
+          child = pexpect.spawn('bash -l -c "%s"' % ssh_command)
+          child.expect('.*password:.*')
+          child.sendline(c['identity']['password'])
+          child.interact()
+          exit()
+          #print 'A password has been detected for \'%s\', but there IS NO SUPPORT for passwords yet.' % args.connect
+          #print 'Only key + key passphrase support is implemented. Trying to continue without using the password...'
       #print ssh_command
       call(ssh_command, shell=True)
       exit()

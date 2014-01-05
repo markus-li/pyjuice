@@ -3,9 +3,8 @@ pyjuice
 
 ## Description
 
-pyJuice is an open source tool for retrieving and decrypting your latest JuiceSSH CloudSync 
-backup and extracting the private keys into ~/.ssh.
-SOON: It can also be used to keep track of all your server credentials and let you directly use the data you have entered in JuiceSSH.
+pyJuice is a GPLv3 open source tool for interacting with JuiceSSH CloudSync. JuiceSSH for Android can be found at https://sonelli.com
+It can also be used to keep track of all your server credentials and let you directly use the data you have entered in JuiceSSH. This now works for SSH connections.
 
 In order to have any use of this script you need to have the PRO version of JuiceSSH (https://sonelli.com/) and have CloudSync turned ON and include Identities.
 
