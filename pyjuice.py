@@ -217,9 +217,12 @@ class AESCipherClient:
     """
     Tests the connection to the daemon.
     """
-    if not skip_safety_check:
-      self.check_safe_socket()
-    return self._send('HELLO::', '')
+    try:
+      if not skip_safety_check:
+        self.check_safe_socket()
+      return self._send('HELLO::', '')
+    except OSError:
+      return False
   
 class OldData(Exception):
   pass

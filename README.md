@@ -3,8 +3,9 @@ pyjuice
 
 ## Description
 
-pyJuice is a GPLv3 open source tool for interacting with JuiceSSH CloudSync. JuiceSSH for Android can be found at https://sonelli.com
-It can also be used to keep track of all your server credentials and let you directly use the data you have entered in JuiceSSH. This now works for SSH connections.
+pyJuice is a GPLv3 open source tool for interacting with JuiceSSH CloudSync. JuiceSSH for Android can be found at https://sonelli.com .
+
+It can also be used to keep track of all your server credentials and let you use the data you have entered in JuiceSSH directly in your shell. Works for SSH connections, other types will come.
 
 In order to have any use of this script you need to have the PRO version of JuiceSSH (https://sonelli.com/) and have CloudSync turned ON and include Identities.
 
@@ -32,6 +33,7 @@ In the future I might split it and create an auto-merged version, but for now, t
 * Encrypt and upload changes. Need full READ support of everything I use first.
 * Come up with more features to implement
 * ~~Fix issues with password-only login over ssh. The whole terminal can't be used when pexpect controls the session.~~
+* Try different methods of authentication in succession if one fails, lastly fall back to asking the user for manual authentication, if possible.
 * Handle incorrect json data gracefully instead of crashing.
 * Make sure the daemon does NOT crash/hang when sent garbage. This should be the case now, but tests need to be written.
 * Add logging facilities to the daemon?
