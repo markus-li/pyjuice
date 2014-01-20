@@ -7,6 +7,8 @@ pyJuice is a GPLv3 open source tool for interacting with JuiceSSH CloudSync. Jui
 
 It can also be used to keep track of all your server credentials and let you use the data you have entered in JuiceSSH directly in your shell. Works for SSH connections, other types will come.
 
+pyJuice does everything I personally have need for already, if you want any particular functionality implemented add a new issue as a "question" in order to motivate me. It's much more fun to develop something if you know there are people using it.
+
 In order to have any use of this script you need to have the PRO version of JuiceSSH (https://sonelli.com/) and have CloudSync turned ON and include Identities.
 
 * Obtains an OAUTH2 authentication token from Google API
