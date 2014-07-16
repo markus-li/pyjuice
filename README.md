@@ -50,7 +50,7 @@ First download and install Python 2.7 and pip.
 On Ubuntu this is as easy as:
 
 ```bash
-$ sudo apt-get update && sudo apt-get install python2.7 python-pip python2.7-dev
+$ sudo apt-get update && sudo apt-get install python2.7 python-pip python2.7-dev python-requests-oauthlib python-pbkdf2 python-passlib
 ```
 
 For other platforms use your packet manager (if any) or download an installer from http://www.python.org/getit/.
